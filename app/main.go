@@ -26,5 +26,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	c.Write([]byte("+PONG\r\n"))
+	for {
+		buff := make([]byte, 1024)
+
+		c.Read(buff)
+
+		c.Write([]byte("+PONG\r\n"))
+	}
+
 }
