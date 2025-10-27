@@ -20,7 +20,7 @@ func handleConnection(c net.Conn) {
 			return
 		}
 
-		c.Write([]byte("PONG"))
+		c.Write([]byte("+PONG\r\n"))
 	}
 
 }
