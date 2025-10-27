@@ -35,13 +35,15 @@ func main() {
 	defer l.Close()
 
 	//Creates a bidirectional channel
+	for {
 
-	c, err := l.Accept() // Three way handshake , creating a socket of type net.Conn
+		c, err := l.Accept() // Three way handshake , creating a socket of type net.Conn
 
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+
+		go handleConnection(c)
 	}
-	go handleConnection(c)
-
 }
