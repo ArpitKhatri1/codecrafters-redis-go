@@ -14,14 +14,12 @@ func ParseRESPInput(input string) string {
 	ans := ""
 	switch input[0] {
 	case String:
-		formattedString := input[1 : len(input)-1]
+		formattedString := strings.TrimSuffix(input[1:], "\r\n")
 		if strings.ToLower(formattedString) == "ping" {
 			ans = "+PONG\r\n"
 		}
 	case Array:
 		commandArray := strings.Split(input, "\r\n")
-		ans = ""
-
 		if strings.ToLower(commandArray[2]) == "echo" {
 			for i := 3; i < len(commandArray)-1; i++ {
 
