@@ -20,7 +20,7 @@ func ParseRESPInput(input string) string {
 		}
 	case Array:
 		commandArray := strings.Split(input, "\r\n")
-		ans := ""
+		ans = ""
 
 		if strings.ToLower(commandArray[2]) == "echo" {
 			for i := 3; i < len(commandArray)-1; i++ {
