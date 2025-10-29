@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -15,8 +16,9 @@ func ParseRESPInput(input string) string {
 	switch input[0] {
 	case String:
 		formattedString := strings.TrimSuffix(input[1:], "\r\n")
+		fmt.Println(formattedString)
 		if strings.ToLower(formattedString) == "ping" {
-			ans = "+PONG\r\n"
+			ans += "+PONG\r\n"
 		}
 	case Array:
 		commandArray := strings.Split(input, "\r\n")
