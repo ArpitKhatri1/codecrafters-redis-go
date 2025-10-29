@@ -11,7 +11,8 @@ const (
 	Array  = '*'
 )
 
-func ParseRESPInput(input string) {
-	commandArray := strings.Split(input, "\r\n")
-	fmt.Println(commandArray[0])
+func ParseRESPInput(input string) []string {
+	commandArray := strings.Split(input, " ")
+	fmt.Println(commandArray[1:])
+	return commandArray[1:]
 }
