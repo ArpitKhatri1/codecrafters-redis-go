@@ -24,9 +24,7 @@ func handleConnection(c net.Conn) {
 
 		output := ParseRESPInput(inputString)
 
-		for _, val := range output {
-			c.Write([]byte("+" + val + "\r\n"))
-		}
+		c.Write([]byte(output))
 
 		// c.Write([]byte("+PONG\r\n"))
 	}
