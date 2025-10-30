@@ -25,6 +25,31 @@ var (
 	mu    sync.RWMutex
 )
 
+// add a go routine which runs every second for active checks
+
+func init() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			cleanupExpiredKeys()
+		}
+	}()
+}
+
+func cleanupExpiredKeys() {
+
+	for key, value := range store {
+		if time.Now().After(value.expireAt) && !value.expireAt.IsZero() {
+
+			mu.Lock()
+			delete(store, key)
+			mu.Unlock()
+
+		}
+	}
+
+}
+
 func ParseRESPInput(input string) string {
 	ans := ""
 	commandArray := strings.Split(input, "\r\n")
