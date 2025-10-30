@@ -29,7 +29,6 @@ func ParseRESPInput(input string) string {
 	ans := ""
 	commandArray := strings.Split(input, "\r\n")
 	command := strings.ToLower(commandArray[2])
-	arrayLength := input[2]
 	switch command {
 	case "echo":
 		for i := 3; i < len(commandArray)-1; i++ {
@@ -44,7 +43,7 @@ func ParseRESPInput(input string) string {
 		var value KVV
 		var expireAt time.Time
 		// check for addition parameters
-		if arrayLength > 3 {
+		if len(commandArray) > 7 {
 			// check which option
 			option := commandArray[8]
 			option = strings.ToLower(option)
