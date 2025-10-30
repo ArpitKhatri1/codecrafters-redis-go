@@ -43,7 +43,7 @@ func ParseRESPInput(input string) string {
 		var value KVV
 		var expireAt time.Time
 		// check for addition parameters
-		if len(commandArray) > 7 {
+		if len(commandArray) >= 9 {
 			// check which option
 			option := commandArray[8]
 			option = strings.ToLower(option)
