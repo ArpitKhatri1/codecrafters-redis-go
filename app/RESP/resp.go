@@ -38,7 +38,7 @@ func (r *RESPParser) handlePING() string {
 }
 
 func (r *RESPParser) handleECHO() string {
-	temp := ""
+	temp := "$"
 	for i := 1; i < len(r.commandArray); i++ {
 
 		temp += strconv.Itoa(len(r.commandArray[i]))
