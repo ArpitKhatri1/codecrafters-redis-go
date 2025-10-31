@@ -127,8 +127,13 @@ func (r *RESPParser) handleINCR() string {
 	key := r.getKeywordAtPosition(2)
 	var increased int
 	mu.Lock()
-	value := store[key]
+	value, exists := store[key]
 	//check if value is integer
+	if !exists {
+		value.value = "1"
+		store[key] = value
+		return returnRESPInteger(1)
+	}
 	val, err := strconv.Atoi(value.value)
 	if err != nil {
 
