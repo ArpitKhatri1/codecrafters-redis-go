@@ -311,6 +311,8 @@ func parseArray(line string, reader *bufio.Reader, c net.Conn) (string, error) {
 		return parser.handleMULTI(c), nil
 	case EXEC:
 		return parser.handleEXEC(c), nil
+	case DISCARD:
+		return parser.handleDISCARD(c), nil
 	default:
 		return "-ERR", nil
 
