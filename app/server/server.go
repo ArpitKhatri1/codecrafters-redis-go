@@ -44,9 +44,9 @@ func handleConnection(c net.Conn) {
 
 func RunServer() {
 
-	l, err := net.Listen("tcp", "0.0.0.0:6379") //creates a Listener
+	l, err := net.Listen("tcp", "0.0.0.0:6387") //creates a Listener
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
+		fmt.Println("Failed to bind to port 6387")
 		os.Exit(1)
 	}
 	defer l.Close()
