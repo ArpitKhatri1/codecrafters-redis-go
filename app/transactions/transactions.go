@@ -12,7 +12,7 @@ type transactions struct {
 var (
 	connTx = make(map[net.Conn]*transactions)
 	connMu sync.Mutex
-)
+) //aw
 
 func CreateTransaction(c net.Conn) {
 	connMu.Lock()
