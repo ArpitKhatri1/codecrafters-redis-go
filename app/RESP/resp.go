@@ -167,6 +167,11 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 	return ""
 }
 
+func (r *RESPParser) handleDISCARD(c net.Conn) string {
+	transactions.HandleDeleteConnection(c)
+	return returnOKStatus()
+}
+
 // add a go routine which runs every second for active checks
 
 func init() {
@@ -234,9 +239,23 @@ func parseArray(line string, reader *bufio.Reader, c net.Conn) (string, error) {
 		commandArray[i] = strings.ToLower(data)
 	}
 
-	// dispatcher
-
 	parser := NewRESPParser(commandArray)
+
+	//check if a transaction is already present
+	transactionsList := transactions.GetTransactionsForConnection(c)
+
+	if transactionsList != nil {
+		switch parser.command {
+		case EXEC:
+			return parser.handleEXEC(c), nil
+		case DISCARD:
+			return parser.handleDISCARD(c), nil
+		default:
+			return transactions.AddCommandToQueue(c, commandArray), nil
+		}
+	}
+
+	// dispatcher
 
 	switch parser.command {
 	case ECHO:

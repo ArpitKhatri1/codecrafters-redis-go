@@ -37,6 +37,19 @@ func GetTransactionsForConnection(c net.Conn) *transactions {
 	return connTx[c]
 }
 
+func AddCommandToQueue(c net.Conn, arr []string) string {
+	connMu.Lock()
+	defer connMu.Unlock()
+
+	//get the transaction
+
+	tx := GetTransactionsForConnection(c)
+
+	tx.queue = append(tx.queue, arr)
+
+	return "+QUEUED\r\n"
+
+}
 func (t *transactions) GetQueue() [][]string {
 	return t.queue
 }
