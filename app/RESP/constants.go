@@ -8,9 +8,10 @@ const (
 )
 
 const (
-	GET  = "get"
-	SET  = "set"
-	INCR = "incr"
-	PING = "ping"
-	ECHO = "echo"
+	GET   = "get"
+	SET   = "set"
+	INCR  = "incr"
+	PING  = "ping"
+	ECHO  = "echo"
+	MULTI = "multi"
 )

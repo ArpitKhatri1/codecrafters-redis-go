@@ -149,6 +149,11 @@ func (r *RESPParser) handleINCR() string {
 
 }
 
+func (r *RESPParser) handleMULTI() string {
+	return returnOKStatus()
+
+}
+
 // add a go routine which runs every second for active checks
 
 func init() {
@@ -191,6 +196,8 @@ func ParseRESPInput(input string) string {
 
 	case INCR:
 		return parser.handleINCR()
+	case MULTI:
+		return parser.handleMULTI()
 	default:
 		return "-ERR"
 
