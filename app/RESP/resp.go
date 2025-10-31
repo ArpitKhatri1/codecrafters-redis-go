@@ -178,6 +178,11 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 }
 
 func (r *RESPParser) handleDISCARD(c net.Conn) string {
+	transactionsList := transactions.GetTransactionsForConnection(c)
+
+	if transactionsList == nil {
+		return returnRESPErrorString("ERR DISCARD without MULTI")
+	}
 	transactions.HandleDeleteConnection(c)
 	return returnOKStatus()
 }
