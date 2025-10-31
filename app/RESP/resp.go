@@ -41,24 +41,14 @@ func (r *RESPParser) handlePING() string {
 }
 
 func (r *RESPParser) handleECHO() string {
-	temp := "$"
-	for i := 1; i < len(r.commandArray); i++ {
-
-		temp += strconv.Itoa(len(r.commandArray[i]))
-		temp += "\r\n"
-		temp += r.commandArray[i]
-		temp += "\r\n"
-	}
-	return temp
+	arg := r.commandArray[1]
+	return "$" + strconv.Itoa(len(arg)) + "\r\n" + arg + "\r\n"
 }
 
-func (r *RESPParser) handleGET() string {
-
+func (r *RESPParser) handleGETUnlocked() string {
 	searchKey := r.commandArray[1]
 
-	mu.Lock()
 	value, ok := store[searchKey]
-	mu.Unlock()
 
 	// check extractied time
 
@@ -66,9 +56,8 @@ func (r *RESPParser) handleGET() string {
 		return returnSpecialBlukErrorStatus()
 	} else {
 		if time.Now().After(value.expireAt) && !value.expireAt.IsZero() {
-			mu.Lock()
+
 			delete(store, searchKey)
-			mu.Unlock()
 
 			return returnSpecialBlukErrorStatus()
 
@@ -81,8 +70,14 @@ func (r *RESPParser) handleGET() string {
 
 }
 
-func (r *RESPParser) handleSET() string {
+func (r *RESPParser) handleGET() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return r.handleGETUnlocked()
 
+}
+
+func (r *RESPParser) handleSETUnlocked() string {
 	key := r.commandArray[1]
 	keyValue := r.commandArray[2]
 	var value KVV
@@ -113,18 +108,21 @@ func (r *RESPParser) handleSET() string {
 		}
 	}
 
-	mu.Lock()
 	store[key] = value
-	mu.Unlock()
 
 	return returnOKStatus()
 }
 
-func (r *RESPParser) handleINCR() string {
-	key := r.commandArray[1]
-	var increased int
+func (r *RESPParser) handleSET() string {
 	mu.Lock()
 	defer mu.Unlock()
+	return r.handleSETUnlocked()
+}
+
+func (r *RESPParser) handleINCRUnlocked() string {
+	key := r.commandArray[1]
+	var increased int
+
 	value, exists := store[key]
 	//check if value is integer
 	if !exists {
@@ -143,6 +141,13 @@ func (r *RESPParser) handleINCR() string {
 	store[key] = value
 
 	return returnRESPInteger(increased)
+}
+
+func (r *RESPParser) handleINCR() string {
+
+	mu.Lock()
+	defer mu.Unlock()
+	return r.handleINCRUnlocked()
 }
 
 func (r *RESPParser) handleMULTI(c net.Conn) string {
@@ -168,7 +173,8 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 	ansString := "*" + strconv.Itoa(len(queue)) + "\r\n"
 
 	//length + \r\n
-
+	mu.Lock()
+	defer mu.Unlock()
 	for _, queries := range queue {
 		parser := NewRESPParser(queries)
 		ansString += parser.handleCommandSelection()
@@ -195,13 +201,13 @@ func (r *RESPParser) handleCommandSelection() string {
 		return r.handlePING()
 
 	case SET: // set key value [options] [optional value]
-		return r.handleSET()
+		return r.handleSETUnlocked()
 
 	case GET:
-		return r.handleGET()
+		return r.handleGETUnlocked()
 
 	case INCR:
-		return r.handleINCR()
+		return r.handleINCRUnlocked()
 	default:
 		return "-ERR"
 
