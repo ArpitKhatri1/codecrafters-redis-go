@@ -39,7 +39,7 @@ func (r *RESPParser) handlePING() string {
 
 func (r *RESPParser) handleECHO() string {
 	temp := ""
-	for i := 1; i < len(r.commandArray)-1; i++ {
+	for i := 1; i < len(r.commandArray); i++ {
 		temp += r.commandArray[i]
 		temp += "\r\n"
 	}
