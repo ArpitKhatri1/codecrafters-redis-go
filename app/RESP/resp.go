@@ -164,12 +164,43 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 	if len(queue) == 0 {
 		return "*0\r\n"
 	}
-	return ""
+
+	ansString := "* " + strconv.Itoa(len(queue)) + "\r\n"
+
+	//length + \r\n
+
+	for _, queries := range queue {
+		parser := NewRESPParser(queries)
+		ansString += parser.handleCommandSelection()
+	}
+
+	return ansString
 }
 
 func (r *RESPParser) handleDISCARD(c net.Conn) string {
 	transactions.HandleDeleteConnection(c)
 	return returnOKStatus()
+}
+
+func (r *RESPParser) handleCommandSelection() string {
+	switch r.command {
+	case ECHO:
+		return r.handleECHO()
+	case PING:
+		return r.handlePING()
+
+	case SET: // set key value [options] [optional value]
+		return r.handleSET()
+
+	case GET:
+		return r.handleGET()
+
+	case INCR:
+		return r.handleINCR()
+	default:
+		return "-ERR"
+
+	}
 }
 
 // add a go routine which runs every second for active checks
