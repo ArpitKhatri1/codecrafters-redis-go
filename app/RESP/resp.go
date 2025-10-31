@@ -127,6 +127,7 @@ func (r *RESPParser) handleINCR() string {
 	key := r.getKeywordAtPosition(2)
 	var increased int
 	mu.Lock()
+	defer mu.Unlock()
 	value, exists := store[key]
 	//check if value is integer
 	if !exists {
@@ -134,15 +135,15 @@ func (r *RESPParser) handleINCR() string {
 		store[key] = value
 		return returnRESPInteger(1)
 	}
+
 	val, err := strconv.Atoi(value.value)
 	if err != nil {
-
+		return "-ERR value is not an integer or out of range\r\n"
 	}
 	val += 1
 	increased = val
 	value.value = strconv.Itoa(val)
 	store[key] = value
-	mu.Unlock()
 
 	return returnRESPInteger(increased)
 
