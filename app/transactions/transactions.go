@@ -38,12 +38,13 @@ func GetTransactionsForConnection(c net.Conn) *transactions {
 }
 
 func AddCommandToQueue(c net.Conn, arr []string) string {
-	connMu.Lock()
-	defer connMu.Unlock()
 
 	//get the transaction
 
 	tx := GetTransactionsForConnection(c)
+
+	connMu.Lock()
+	defer connMu.Unlock()
 
 	tx.queue = append(tx.queue, arr)
 
