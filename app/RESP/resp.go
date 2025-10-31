@@ -165,7 +165,7 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 		return "*0\r\n"
 	}
 
-	ansString := "* " + strconv.Itoa(len(queue)) + "\r\n"
+	ansString := "*" + strconv.Itoa(len(queue)) + "\r\n"
 
 	//length + \r\n
 
