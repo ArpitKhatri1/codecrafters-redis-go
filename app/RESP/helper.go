@@ -15,3 +15,11 @@ func returnSpecialBlukErrorStatus() string {
 func returnRESPInteger(num int) string {
 	return ":" + strconv.Itoa(num) + "\r\n"
 }
+
+func returnRESPBlukString(str string) string {
+	return "$" + str + "\r\n"
+}
+
+func returnRESPErrorString(str string) string {
+	return "-" + str + "\r\n"
+}

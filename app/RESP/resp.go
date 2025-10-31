@@ -1,8 +1,8 @@
 package resp
 
 import (
+	"bufio"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,20 +20,16 @@ var (
 )
 
 type RESPParser struct {
-	userInput    string
 	commandArray []string
 	command      string
 }
 
-func NewRESPParser(input string) *RESPParser {
-
-	commandArray := strings.Split(input, "\r\n")
-	command := strings.ToLower(commandArray[2])
+func NewRESPParser(commandArray []string) *RESPParser {
 
 	return &RESPParser{
-		userInput:    input,
+
 		commandArray: commandArray,
-		command:      command,
+		command:      commandArray[0],
 	}
 }
 
@@ -43,7 +39,7 @@ func (r *RESPParser) handlePING() string {
 
 func (r *RESPParser) handleECHO() string {
 	temp := ""
-	for i := 3; i < len(r.commandArray)-1; i++ {
+	for i := 1; i < len(r.commandArray)-1; i++ {
 		temp += r.commandArray[i]
 		temp += "\r\n"
 	}
@@ -52,7 +48,7 @@ func (r *RESPParser) handleECHO() string {
 
 func (r *RESPParser) handleGET() string {
 
-	searchKey := r.commandArray[4]
+	searchKey := r.commandArray[1]
 
 	mu.Lock()
 	value, ok := store[searchKey]
@@ -81,23 +77,22 @@ func (r *RESPParser) handleGET() string {
 
 func (r *RESPParser) handleSET() string {
 
-	key := r.commandArray[4]
-	keyValue := r.commandArray[6]
+	key := r.commandArray[1]
+	keyValue := r.commandArray[2]
 	var value KVV
 	var expireAt time.Time
 	// check for addition parameters
-	if len(r.commandArray) >= 9 {
+	if len(r.commandArray) >= 4 {
 		// check which option
-		option := r.commandArray[8]
+		option := r.commandArray[3]
 		option = strings.ToLower(option)
 
 		switch option {
 		case "px":
-			expiryTime := r.commandArray[10] // string value convert to interget
+			expiryTime := r.commandArray[4] // string value convert to interget
 			formattedTime, err := time.ParseDuration(expiryTime + "ms")
 			if err != nil {
-				fmt.Println("There was some error")
-				os.Exit(1)
+				return returnRESPErrorString("ERR")
 			}
 			value = KVV{
 				value:    keyValue,
@@ -119,12 +114,8 @@ func (r *RESPParser) handleSET() string {
 	return returnOKStatus()
 }
 
-func (r *RESPParser) getKeywordAtPosition(position int) string { // one - based position
-	return r.commandArray[position*2]
-}
-
 func (r *RESPParser) handleINCR() string {
-	key := r.getKeywordAtPosition(2)
+	key := r.commandArray[1]
 	var increased int
 	mu.Lock()
 	defer mu.Unlock()
@@ -146,12 +137,15 @@ func (r *RESPParser) handleINCR() string {
 	store[key] = value
 
 	return returnRESPInteger(increased)
-
 }
 
 func (r *RESPParser) handleMULTI() string {
 	return returnOKStatus()
 
+}
+
+func (r *RESPParser) handleEXEC() string {
+	return returnRESPErrorString("ERR EXEC without MULTI")
 }
 
 // add a go routine which runs every second for active checks
@@ -166,40 +160,85 @@ func init() {
 }
 
 func cleanupExpiredKeys() {
-
+	mu.Lock()
+	defer mu.Unlock()
 	for key, value := range store {
 		if time.Now().After(value.expireAt) && !value.expireAt.IsZero() {
 
-			mu.Lock()
 			delete(store, key)
-			mu.Unlock()
 
 		}
 	}
 
 }
 
-func ParseRESPInput(input string) string {
-	parser := NewRESPParser(input)
+func ParseRESPInput(reader *bufio.Reader) (string, error) {
+
+	line, err := reader.ReadString('\n') //store in buffer until it accquires \n which then stops and return in line
+
+	if err != nil {
+		return "", err
+	}
+
+	line = strings.TrimSuffix(line, "\r\n")
+
+	switch line[0] {
+	case '*':
+		return parseArray(line, reader)
+
+	default:
+		return "", fmt.Errorf("unknow type")
+	}
+
+}
+
+func parseArray(line string, reader *bufio.Reader) (string, error) {
+	commandLength, err := strconv.Atoi(line[1:])
+
+	if err != nil {
+		return "", err
+	}
+	commandArray := make([]string, commandLength)
+
+	for i := 0; i < commandLength; i++ {
+		_, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+
+		data, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		data = strings.TrimSuffix(data, "\r\n")
+
+		commandArray[i] = strings.ToLower(data)
+	}
+
+	// dispatcher
+
+	parser := NewRESPParser(commandArray)
 
 	switch parser.command {
 	case ECHO:
-		return parser.handleECHO()
+		return parser.handleECHO(), nil
 	case PING:
-		return parser.handlePING()
+		return parser.handlePING(), nil
 
 	case SET: // set key value [options] [optional value]
-		return parser.handleSET()
+		return parser.handleSET(), nil
 
 	case GET:
-		return parser.handleGET()
+		return parser.handleGET(), nil
 
 	case INCR:
-		return parser.handleINCR()
+		return parser.handleINCR(), nil
 	case MULTI:
-		return parser.handleMULTI()
+		return parser.handleMULTI(), nil
+	case EXEC:
+		return parser.handleEXEC(), nil
 	default:
-		return "-ERR"
+		return "-ERR", nil
 
 	}
 

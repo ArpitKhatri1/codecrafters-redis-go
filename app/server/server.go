@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 
@@ -13,18 +15,20 @@ var _ = os.Exit
 
 func handleConnection(c net.Conn) {
 	defer c.Close()
-	buff := make([]byte, 1024)
+	//even tho this is blocking , go handles the thread to another go routine.
+	reader := bufio.NewReader(c) //aviod partial read if we use a byte channel , if full line ending with \n give that line solving buffer splitting
 
 	for {
-		n, err := c.Read(buff)
+
+		output, err := resp.ParseRESPInput(reader)
 		if err != nil {
-			fmt.Println("Connection err", err)
+			if err == io.EOF {
+				fmt.Println("Client disconnected")
+				return
+			}
+			fmt.Println("Client removed")
 			return
 		}
-
-		inputString := string(buff[:n])
-
-		output := resp.ParseRESPInput(inputString)
 
 		c.Write([]byte(output))
 
