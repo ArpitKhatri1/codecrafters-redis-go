@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+
+	resp "github.com/codecrafters-io/redis-starter-go/app/RESP"
 )
 
 var _ = net.Listen
@@ -22,7 +24,7 @@ func handleConnection(c net.Conn) {
 
 		inputString := string(buff[:n])
 
-		output := ParseRESPInput(inputString)
+		output := resp.ParseRESPInput(inputString)
 
 		c.Write([]byte(output))
 
