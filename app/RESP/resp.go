@@ -3,10 +3,13 @@ package resp
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	transactions "github.com/codecrafters-io/redis-starter-go/app/transactions"
 )
 
 type KVV struct {
@@ -142,13 +145,26 @@ func (r *RESPParser) handleINCR() string {
 	return returnRESPInteger(increased)
 }
 
-func (r *RESPParser) handleMULTI() string {
+func (r *RESPParser) handleMULTI(c net.Conn) string {
+	transactions.CreateTransaction(c)
 	return returnOKStatus()
 
 }
 
-func (r *RESPParser) handleEXEC() string {
-	return returnRESPErrorString("ERR EXEC without MULTI")
+func (r *RESPParser) handleEXEC(c net.Conn) string {
+	transactionsList := transactions.GetTransactionsForConnection(c) // return transactions pointer which is private so need a method to access queue
+
+	if transactionsList == nil {
+		return returnRESPErrorString("ERR EXEC without MULTI")
+	}
+
+	transactions.HandleDeleteConnection(c)
+	queue := transactionsList.GetQueue()
+
+	if len(queue) == 0 {
+		return "*0\r\n"
+	}
+	return ""
 }
 
 // add a go routine which runs every second for active checks
@@ -175,7 +191,7 @@ func cleanupExpiredKeys() {
 
 }
 
-func ParseRESPInput(reader *bufio.Reader) (string, error) {
+func ParseRESPInput(reader *bufio.Reader, c net.Conn) (string, error) {
 
 	line, err := reader.ReadString('\n') //store in buffer until it accquires \n which then stops and return in line
 
@@ -187,7 +203,7 @@ func ParseRESPInput(reader *bufio.Reader) (string, error) {
 
 	switch line[0] {
 	case '*':
-		return parseArray(line, reader)
+		return parseArray(line, reader, c)
 
 	default:
 		return "", fmt.Errorf("unknow type")
@@ -195,7 +211,7 @@ func ParseRESPInput(reader *bufio.Reader) (string, error) {
 
 }
 
-func parseArray(line string, reader *bufio.Reader) (string, error) {
+func parseArray(line string, reader *bufio.Reader, c net.Conn) (string, error) {
 	commandLength, err := strconv.Atoi(line[1:])
 
 	if err != nil {
@@ -237,9 +253,9 @@ func parseArray(line string, reader *bufio.Reader) (string, error) {
 	case INCR:
 		return parser.handleINCR(), nil
 	case MULTI:
-		return parser.handleMULTI(), nil
+		return parser.handleMULTI(c), nil
 	case EXEC:
-		return parser.handleEXEC(), nil
+		return parser.handleEXEC(c), nil
 	default:
 		return "-ERR", nil
 

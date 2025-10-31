@@ -8,24 +8,29 @@ import (
 	"os"
 
 	resp "github.com/codecrafters-io/redis-starter-go/app/RESP"
+	transactions "github.com/codecrafters-io/redis-starter-go/app/transactions"
 )
 
 var _ = net.Listen
 var _ = os.Exit
 
 func handleConnection(c net.Conn) {
+
 	defer c.Close()
+
 	//even tho this is blocking , go handles the thread to another go routine.
 	reader := bufio.NewReader(c) //aviod partial read if we use a byte channel , if full line ending with \n give that line solving buffer splitting
 
 	for {
 
-		output, err := resp.ParseRESPInput(reader)
+		output, err := resp.ParseRESPInput(reader, c)
 		if err != nil {
 			if err == io.EOF {
 				fmt.Println("Client disconnected")
+				transactions.HandleDeleteConnection(c)
 				return
 			}
+			transactions.HandleDeleteConnection(c)
 			fmt.Println("Client removed")
 			return
 		}
@@ -56,6 +61,6 @@ func RunServer() {
 			os.Exit(1)
 		}
 
-		go handleConnection(c)
+		go handleConnection(c) // dont pass interface by value, it will override the previous connection address
 	}
 }
