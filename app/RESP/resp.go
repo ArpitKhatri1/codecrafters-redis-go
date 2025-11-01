@@ -172,7 +172,7 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 
 	ansString := "*" + strconv.Itoa(len(queue)) + "\r\n"
 
-	//length + \r\n
+	// completely isolated transactions
 	mu.Lock()
 	defer mu.Unlock()
 	for _, queries := range queue {
