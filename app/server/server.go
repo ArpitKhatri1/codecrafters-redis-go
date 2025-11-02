@@ -15,14 +15,10 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
-// Server is a local struct in the 'server' package
-// It embeds *types.ServerState to gain its fields and data.
 type Server struct {
 	*types.ServerState
 }
 
-// handleClient is now a local function in the 'server' package,
-// not a method on types.ClientState.
 func handleClient(c *types.ClientState) {
 	defer c.ConnectionId.Close()
 	reader := bufio.NewReader(c.ConnectionId)
@@ -42,7 +38,6 @@ func handleClient(c *types.ClientState) {
 	}
 }
 
-// NewServer now returns the local *Server type
 func NewServer(config *types.ServerConfig) *Server {
 	// Create the underlying ServerState from the 'types' package
 	serverState := &types.ServerState{
@@ -50,12 +45,10 @@ func NewServer(config *types.ServerConfig) *Server {
 		Store:  make(map[string]types.KVV),
 	}
 
-	// Create the local Server wrapper
 	s := &Server{
 		ServerState: serverState,
 	}
 
-	// Call the method on the local *Server type
 	s.startCleanupRoutine()
 	return s
 }
@@ -72,7 +65,6 @@ func NewClient(server *types.ServerState, conn net.Conn, id int) *types.ClientSt
 	return client
 }
 
-// This method is now correctly defined on the local *Server type
 func (s *Server) cleanupExpiredKeys() {
 	// Fields are accessed directly via embedding
 	s.StoreMu.Lock()
@@ -86,7 +78,6 @@ func (s *Server) cleanupExpiredKeys() {
 	}
 }
 
-// This method is now correctly defined on the local *Server type
 func (s *Server) startCleanupRoutine() {
 	go func() {
 		for {
@@ -96,9 +87,8 @@ func (s *Server) startCleanupRoutine() {
 	}()
 }
 
-// This method is now correctly defined on the local *Server type
 func (s *Server) Start() {
-	l, err := net.Listen("tcp", "0.0.0.0"+s.Config.Port)
+	l, err := net.Listen("tcp", "0.0.0.0:"+s.Config.Port)
 	if err != nil {
 		fmt.Println("Failed to bind on port " + s.Config.Port)
 		return
