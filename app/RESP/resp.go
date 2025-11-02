@@ -6,31 +6,20 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	transactions "github.com/codecrafters-io/redis-starter-go/app/transactions"
-)
-
-type KVV struct {
-	value    string
-	expireAt time.Time
-}
-
-var (
-	store = make(map[string]KVV)
-	mu    sync.RWMutex
+	types "github.com/codecrafters-io/redis-starter-go/app/types"
 )
 
 type RESPParser struct {
+	client       *types.ClientState
 	commandArray []string
 	command      string
 }
 
-func NewRESPParser(commandArray []string) *RESPParser {
-
+func NewRESPParser(commandArray []string, client *types.ClientState) *RESPParser {
 	return &RESPParser{
-
+		client:       client,
 		commandArray: commandArray,
 		command:      commandArray[0],
 	}
@@ -45,126 +34,112 @@ func (r *RESPParser) handleECHO() string {
 	return "$" + strconv.Itoa(len(arg)) + "\r\n" + arg + "\r\n"
 }
 
+func (r *RESPParser) handleGET() string {
+	r.client.Server.StoreMu.RLock()
+	defer r.client.Server.StoreMu.RUnlock()
+	return r.handleGETUnlocked()
+}
+
 func (r *RESPParser) handleGETUnlocked() string {
 	searchKey := r.commandArray[1]
-
-	value, ok := store[searchKey]
-
-	// check extractied time
+	value, ok := r.client.Server.Store[searchKey]
 
 	if !ok {
 		return returnSpecialBlukErrorStatus()
 	} else {
-		if time.Now().After(value.expireAt) && !value.expireAt.IsZero() {
-
-			delete(store, searchKey)
-
+		if !value.ExpireAt.IsZero() && time.Now().After(value.ExpireAt) {
 			return returnSpecialBlukErrorStatus()
-
 		} else {
-
-			return "$" + strconv.Itoa(len(value.value)) + "\r\n" + value.value + "\r\n"
+			return "$" + strconv.Itoa(len(value.Value)) + "\r\n" + value.Value + "\r\n"
 		}
-
 	}
-
 }
 
-func (r *RESPParser) handleGET() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return r.handleGETUnlocked()
-
+func (r *RESPParser) handleSET() string {
+	r.client.Server.StoreMu.Lock()
+	defer r.client.Server.StoreMu.Unlock()
+	return r.handleSETUnlocked()
 }
 
 func (r *RESPParser) handleSETUnlocked() string {
 	key := r.commandArray[1]
 	keyValue := r.commandArray[2]
-	var value KVV
+	var value types.KVV
 	var expireAt time.Time
-	// check for addition parameters
-	if len(r.commandArray) >= 4 {
-		// check which option
-		option := r.commandArray[3]
-		option = strings.ToLower(option)
 
+	if len(r.commandArray) >= 4 {
+		option := r.commandArray[3]
 		switch option {
 		case "px":
-			expiryTime := r.commandArray[4] // string value convert to interget
+			if len(r.commandArray) < 5 {
+				return returnRESPErrorString("syntax error")
+			}
+			expiryTime := r.commandArray[4]
 			formattedTime, err := time.ParseDuration(expiryTime + "ms")
 			if err != nil {
-				return returnRESPErrorString("ERR")
+				return returnRESPErrorString("value is not an integer or out of range")
 			}
-			value = KVV{
-				value:    keyValue,
-				expireAt: time.Now().Add(formattedTime),
-			}
-
-		}
-	} else {
-		value = KVV{
-			value:    keyValue,
-			expireAt: expireAt,
+			expireAt = time.Now().Add(formattedTime)
 		}
 	}
 
-	store[key] = value
+	value = types.KVV{
+		Value:    keyValue,
+		ExpireAt: expireAt,
+	}
+
+	r.client.Server.Store[key] = value
 
 	return returnOKStatus()
 }
 
-func (r *RESPParser) handleSET() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return r.handleSETUnlocked()
+func (r *RESPParser) handleINCR() string {
+	r.client.Server.StoreMu.Lock()
+	defer r.client.Server.StoreMu.Unlock()
+	return r.handleINCRUnlocked()
 }
 
 func (r *RESPParser) handleINCRUnlocked() string {
 	key := r.commandArray[1]
 	var increased int
 
-	value, exists := store[key]
-	//check if value is integer
+	value, exists := r.client.Server.Store[key]
+
 	if !exists {
-		value.value = "1"
-		store[key] = value
+		value.Value = "1"
+		r.client.Server.Store[key] = value
 		return returnRESPInteger(1)
 	}
 
-	val, err := strconv.Atoi(value.value)
+	val, err := strconv.Atoi(value.Value)
 	if err != nil {
-		return "-ERR value is not an integer or out of range\r\n"
+		return returnRESPErrorString("value is not an integer or out of range")
 	}
 	val += 1
 	increased = val
-	value.value = strconv.Itoa(val)
-	store[key] = value
+	value.Value = strconv.Itoa(val)
+	r.client.Server.Store[key] = value
 
 	return returnRESPInteger(increased)
 }
 
-func (r *RESPParser) handleINCR() string {
-
-	mu.Lock()
-	defer mu.Unlock()
-	return r.handleINCRUnlocked()
-}
-
 func (r *RESPParser) handleMULTI(c net.Conn) string {
-	transactions.CreateTransaction(c)
+	if r.client.InTransaction {
+		return returnRESPErrorString("MULTI calls can not be nested")
+	}
+	r.client.InTransaction = true
+	r.client.TransactionQueue = make([][]string, 0)
 	return returnOKStatus()
-
 }
 
 func (r *RESPParser) handleEXEC(c net.Conn) string {
-	transactionsList := transactions.GetTransactionsForConnection(c) // return transactions pointer which is private so need a method to access queue
-
-	if transactionsList == nil {
-		return returnRESPErrorString("ERR EXEC without MULTI")
+	if !r.client.InTransaction {
+		return returnRESPErrorString("EXEC without MULTI")
 	}
 
-	transactions.HandleDeleteConnection(c)
-	queue := transactionsList.GetQueue()
+	queue := r.client.TransactionQueue
+	r.client.InTransaction = false
+	r.client.TransactionQueue = nil
 
 	if len(queue) == 0 {
 		return "*0\r\n"
@@ -172,11 +147,11 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 
 	ansString := "*" + strconv.Itoa(len(queue)) + "\r\n"
 
-	// completely isolated transactions
-	mu.Lock()
-	defer mu.Unlock()
+	r.client.Server.StoreMu.Lock()
+	defer r.client.Server.StoreMu.Unlock()
+
 	for _, queries := range queue {
-		parser := NewRESPParser(queries)
+		parser := NewRESPParser(queries, r.client)
 		ansString += parser.handleCommandSelection()
 	}
 
@@ -184,12 +159,11 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 }
 
 func (r *RESPParser) handleDISCARD(c net.Conn) string {
-	transactionsList := transactions.GetTransactionsForConnection(c)
-
-	if transactionsList == nil {
-		return returnRESPErrorString("ERR DISCARD without MULTI")
+	if !r.client.InTransaction {
+		return returnRESPErrorString("DISCARD without MULTI")
 	}
-	transactions.HandleDeleteConnection(c)
+	r.client.InTransaction = false
+	r.client.TransactionQueue = nil
 	return returnOKStatus()
 }
 
@@ -199,68 +173,38 @@ func (r *RESPParser) handleCommandSelection() string {
 		return r.handleECHO()
 	case PING:
 		return r.handlePING()
-
-	case SET: // set key value [options] [optional value]
+	case SET:
 		return r.handleSETUnlocked()
-
 	case GET:
 		return r.handleGETUnlocked()
-
 	case INCR:
 		return r.handleINCRUnlocked()
 	default:
-		return "-ERR"
-
+		return returnRESPErrorString("unknown command '" + r.command + "'")
 	}
 }
 
-// add a go routine which runs every second for active checks
-
-func init() {
-	go func() {
-		for {
-			time.Sleep(1 * time.Second)
-			cleanupExpiredKeys()
-		}
-	}()
-}
-
-func cleanupExpiredKeys() {
-	mu.Lock()
-	defer mu.Unlock()
-	for key, value := range store {
-		if time.Now().After(value.expireAt) && !value.expireAt.IsZero() {
-
-			delete(store, key)
-
-		}
-	}
-
-}
-
-func ParseRESPInput(reader *bufio.Reader, c net.Conn) (string, error) {
-
-	line, err := reader.ReadString('\n') //store in buffer until it accquires \n which then stops and return in line
-
+func ParseRESPInput(reader *bufio.Reader, c *types.ClientState) (string, error) {
+	line, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
 
 	line = strings.TrimSuffix(line, "\r\n")
+	if len(line) == 0 {
+		return "", fmt.Errorf("empty input")
+	}
 
 	switch line[0] {
 	case '*':
 		return parseArray(line, reader, c)
-
 	default:
-		return "", fmt.Errorf("unknow type")
+		return "", fmt.Errorf("unknown input type: %s", line)
 	}
-
 }
 
-func parseArray(line string, reader *bufio.Reader, c net.Conn) (string, error) {
+func parseArray(line string, reader *bufio.Reader, c *types.ClientState) (string, error) {
 	commandLength, err := strconv.Atoi(line[1:])
-
 	if err != nil {
 		return "", err
 	}
@@ -271,57 +215,53 @@ func parseArray(line string, reader *bufio.Reader, c net.Conn) (string, error) {
 		if err != nil {
 			return "", err
 		}
-
 		data, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
 		}
 		data = strings.TrimSuffix(data, "\r\n")
 
-		commandArray[i] = strings.ToLower(data)
-	}
-
-	parser := NewRESPParser(commandArray)
-
-	//check if a transaction is already present
-	transactionsList := transactions.GetTransactionsForConnection(c)
-
-	if transactionsList != nil {
-		switch parser.command {
-		case EXEC:
-			return parser.handleEXEC(c), nil
-		case DISCARD:
-			return parser.handleDISCARD(c), nil
-		default:
-			return transactions.AddCommandToQueue(c, commandArray), nil
+		if i == 0 {
+			commandArray[i] = strings.ToLower(data)
+		} else {
+			commandArray[i] = data
 		}
 	}
 
-	// dispatcher
+	parser := NewRESPParser(commandArray, c)
+
+	if c.InTransaction {
+		switch parser.command {
+		case EXEC:
+			return parser.handleEXEC(c.ConnectionId), nil
+		case DISCARD:
+			return parser.handleDISCARD(c.ConnectionId), nil
+		case MULTI:
+			return returnRESPErrorString("MULTI calls can not be nested"), nil
+		default:
+			c.TransactionQueue = append(c.TransactionQueue, commandArray)
+			return "+QUEUED\r\n", nil
+		}
+	}
 
 	switch parser.command {
 	case ECHO:
 		return parser.handleECHO(), nil
 	case PING:
 		return parser.handlePING(), nil
-
-	case SET: // set key value [options] [optional value]
+	case SET:
 		return parser.handleSET(), nil
-
 	case GET:
 		return parser.handleGET(), nil
-
 	case INCR:
 		return parser.handleINCR(), nil
 	case MULTI:
-		return parser.handleMULTI(c), nil
+		return parser.handleMULTI(c.ConnectionId), nil
 	case EXEC:
-		return parser.handleEXEC(c), nil
+		return parser.handleEXEC(c.ConnectionId), nil
 	case DISCARD:
-		return parser.handleDISCARD(c), nil
+		return parser.handleDISCARD(c.ConnectionId), nil
 	default:
-		return "-ERR", nil
-
+		return returnRESPErrorString("unknown command '" + parser.command + "'"), nil
 	}
-
 }

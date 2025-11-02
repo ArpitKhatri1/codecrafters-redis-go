@@ -6,61 +6,118 @@ import (
 	"io"
 	"net"
 	"os"
+	"time"
 
 	resp "github.com/codecrafters-io/redis-starter-go/app/RESP"
-	transactions "github.com/codecrafters-io/redis-starter-go/app/transactions"
+	types "github.com/codecrafters-io/redis-starter-go/app/types"
 )
 
 var _ = net.Listen
 var _ = os.Exit
 
-func handleConnection(c net.Conn) {
+// Server is a local struct in the 'server' package
+// It embeds *types.ServerState to gain its fields and data.
+type Server struct {
+	*types.ServerState
+}
 
-	defer c.Close()
-
-	//even tho this is blocking , go handles the thread to another go routine.
-	reader := bufio.NewReader(c) //aviod partial read if we use a byte channel , if full line ending with \n give that line solving buffer splitting
+// handleClient is now a local function in the 'server' package,
+// not a method on types.ClientState.
+func handleClient(c *types.ClientState) {
+	defer c.ConnectionId.Close()
+	reader := bufio.NewReader(c.ConnectionId)
 
 	for {
-
 		output, err := resp.ParseRESPInput(reader, c)
 		if err != nil {
 			if err == io.EOF {
-				fmt.Println("Client disconnected")
-				transactions.HandleDeleteConnection(c)
+				fmt.Printf("Client %d disconnected\n", c.Id)
 				return
 			}
-			transactions.HandleDeleteConnection(c)
-			fmt.Println("Client removed")
+			fmt.Printf("Error handling client %d: %v\n", c.Id, err)
 			return
 		}
 
-		c.Write([]byte(output))
-
-		// c.Write([]byte("+PONG\r\n"))
+		c.ConnectionId.Write([]byte(output))
 	}
-
 }
 
-func RunServer() {
-
-	l, err := net.Listen("tcp", "0.0.0.0:6387") //creates a Listener
-	if err != nil {
-		fmt.Println("Failed to bind to port 6387")
-		os.Exit(1)
+// NewServer now returns the local *Server type
+func NewServer(config *types.ServerConfig) *Server {
+	// Create the underlying ServerState from the 'types' package
+	serverState := &types.ServerState{
+		Config: config,
+		Store:  make(map[string]types.KVV),
 	}
-	defer l.Close()
 
-	//Creates a bidirectional channel
-	for {
+	// Create the local Server wrapper
+	s := &Server{
+		ServerState: serverState,
+	}
 
-		c, err := l.Accept() // Three way handshake , creating a socket of type net.Conn
+	// Call the method on the local *Server type
+	s.startCleanupRoutine()
+	return s
+}
 
+// NewClient still takes the *types.ServerState
+func NewClient(server *types.ServerState, conn net.Conn, id int) *types.ClientState {
+	client := &types.ClientState{
+		Server:           server,
+		ConnectionId:     conn,
+		Id:               id,
+		InTransaction:    false,
+		TransactionQueue: nil,
+	}
+	return client
+}
+
+// This method is now correctly defined on the local *Server type
+func (s *Server) cleanupExpiredKeys() {
+	// Fields are accessed directly via embedding
+	s.StoreMu.Lock()
+	defer s.StoreMu.Unlock()
+
+	now := time.Now()
+	for key, value := range s.Store {
+		if !value.ExpireAt.IsZero() && now.After(value.ExpireAt) {
+			delete(s.Store, key)
+		}
+	}
+}
+
+// This method is now correctly defined on the local *Server type
+func (s *Server) startCleanupRoutine() {
+	go func() {
+		for {
+			time.Sleep(100 * time.Millisecond)
+			s.cleanupExpiredKeys()
+		}
+	}()
+}
+
+// This method is now correctly defined on the local *Server type
+func (s *Server) Start() {
+	l, err := net.Listen("tcp", "0.0.0.0"+s.Config.Port)
+	if err != nil {
+		fmt.Println("Failed to bind on port " + s.Config.Port)
+		return
+	}
+	fmt.Printf("Server listening on port %s\n", s.Config.Port)
+
+	for i := 0; ; i++ {
+		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
+			fmt.Println("Error accepting response")
+			continue
 		}
 
-		go handleConnection(c) // dont pass interface by value, it will override the previous connection address
+		fmt.Printf("Accepted new client: %d\n", i)
+
+		// We pass the embedded *types.ServerState to NewClient
+		client := NewClient(s.ServerState, conn, i)
+
+		// Call the local handleClient function
+		go handleClient(client)
 	}
 }

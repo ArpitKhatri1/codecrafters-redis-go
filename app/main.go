@@ -1,8 +1,15 @@
 package main
 
-import "github.com/codecrafters-io/redis-starter-go/app/server"
+import (
+	"flag"
+
+	"github.com/codecrafters-io/redis-starter-go/app/server"
+)
 
 func main() {
+	port := flag.String("port", "6379", "Port to listen on")
 
-	server.RunServer()
+	flag.Parse()
+
+	server.RunServer(*port)
 }
