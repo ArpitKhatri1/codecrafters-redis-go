@@ -7,8 +7,12 @@ import (
 )
 
 type ServerConfig struct {
-	Port string
-	Role string
+	Port       string
+	Role       string
+	Replid     string
+	ReplOffset int
+	MasterHost string
+	MasterPort string
 }
 
 type KVV struct {
@@ -20,6 +24,9 @@ type ServerState struct {
 	Config  *ServerConfig
 	Store   map[string]KVV
 	StoreMu sync.RWMutex
+
+	Replicas  []*ClientState
+	ReplicaMu sync.RWMutex
 }
 
 type ClientState struct {

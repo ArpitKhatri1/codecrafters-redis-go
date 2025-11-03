@@ -3,7 +3,6 @@ package resp
 import (
 	"bufio"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -123,7 +122,7 @@ func (r *RESPParser) handleINCRUnlocked() string {
 	return returnRESPInteger(increased)
 }
 
-func (r *RESPParser) handleMULTI(c net.Conn) string {
+func (r *RESPParser) handleMULTI() string {
 	if r.client.InTransaction {
 		return returnRESPErrorString("MULTI calls can not be nested")
 	}
@@ -132,7 +131,7 @@ func (r *RESPParser) handleMULTI(c net.Conn) string {
 	return returnOKStatus()
 }
 
-func (r *RESPParser) handleEXEC(c net.Conn) string {
+func (r *RESPParser) handleEXEC() string {
 	if !r.client.InTransaction {
 		return returnRESPErrorString("EXEC without MULTI")
 	}
@@ -158,7 +157,7 @@ func (r *RESPParser) handleEXEC(c net.Conn) string {
 	return ansString
 }
 
-func (r *RESPParser) handleDISCARD(c net.Conn) string {
+func (r *RESPParser) handleDISCARD() string {
 	if !r.client.InTransaction {
 		return returnRESPErrorString("DISCARD without MULTI")
 	}
@@ -167,6 +166,21 @@ func (r *RESPParser) handleDISCARD(c net.Conn) string {
 	return returnOKStatus()
 }
 
+func (r *RESPParser) handleINFO() string {
+	offset := strconv.Itoa(r.client.Server.Config.ReplOffset)
+	return r.client.Server.Config.Role + " " + r.client.Server.Config.Port + " " + r.client.Server.Config.Replid + " " + offset
+}
+
+func (r *RESPParser) handleREPLCONF() string {
+	return returnOKStatus()
+}
+
+func (r *RESPParser) handlePSYNC() string {
+
+	masterReplId := r.client.Server.Config.Replid
+	// add
+	return "+FULLRESYNC " + masterReplId + " 0\r\n"
+}
 func (r *RESPParser) handleCommandSelection() string {
 	switch r.command {
 	case ECHO:
@@ -233,9 +247,9 @@ func parseArray(line string, reader *bufio.Reader, c *types.ClientState) (string
 	if c.InTransaction {
 		switch parser.command {
 		case EXEC:
-			return parser.handleEXEC(c.ConnectionId), nil
+			return parser.handleEXEC(), nil
 		case DISCARD:
-			return parser.handleDISCARD(c.ConnectionId), nil
+			return parser.handleDISCARD(), nil
 		case MULTI:
 			return returnRESPErrorString("MULTI calls can not be nested"), nil
 		default:
@@ -256,11 +270,17 @@ func parseArray(line string, reader *bufio.Reader, c *types.ClientState) (string
 	case INCR:
 		return parser.handleINCR(), nil
 	case MULTI:
-		return parser.handleMULTI(c.ConnectionId), nil
+		return parser.handleMULTI(), nil
 	case EXEC:
-		return parser.handleEXEC(c.ConnectionId), nil
+		return parser.handleEXEC(), nil
 	case DISCARD:
-		return parser.handleDISCARD(c.ConnectionId), nil
+		return parser.handleDISCARD(), nil
+	case INFO:
+		return parser.handleINFO(), nil
+	case REPLCONF:
+		return parser.handleREPLCONF(), nil
+	case PSYNC:
+		return parser.handlePSYNC(), nil
 	default:
 		return returnRESPErrorString("unknown command '" + parser.command + "'"), nil
 	}
