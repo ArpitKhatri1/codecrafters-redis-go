@@ -25,8 +25,9 @@ type ServerState struct {
 	Store   map[string]KVV
 	StoreMu sync.RWMutex
 
-	Replicas  []*ClientState
-	ReplicaMu sync.RWMutex
+	Replicas        []*ClientState
+	ReplicaMu       sync.RWMutex
+	PropagationChan chan []string
 }
 
 type ClientState struct {

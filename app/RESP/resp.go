@@ -3,6 +3,7 @@ package resp
 import (
 	"bufio"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -89,6 +90,10 @@ func (r *RESPParser) handleSETUnlocked() string {
 
 	r.client.Server.Store[key] = value
 
+	if r.client.Server.Config.Role == "master" {
+		r.client.Server.PropagationChan <- r.commandArray
+	}
+
 	return returnOKStatus()
 }
 
@@ -118,6 +123,11 @@ func (r *RESPParser) handleINCRUnlocked() string {
 	increased = val
 	value.Value = strconv.Itoa(val)
 	r.client.Server.Store[key] = value
+
+	if r.client.Server.Config.Role == "master" {
+		fmt.Println("added")
+		r.client.Server.PropagationChan <- r.commandArray
+	}
 
 	return returnRESPInteger(increased)
 }
@@ -167,8 +177,21 @@ func (r *RESPParser) handleDISCARD() string {
 }
 
 func (r *RESPParser) handleINFO() string {
+
+	role := r.client.Server.Config.Role
+	replid := r.client.Server.Config.Replid
 	offset := strconv.Itoa(r.client.Server.Config.ReplOffset)
-	return r.client.Server.Config.Role + " " + r.client.Server.Config.Port + " " + r.client.Server.Config.Replid + " " + offset
+
+	infoLines := []string{
+		"# Replication",
+		"role:" + role,
+		"master_replid:" + replid,
+		"master_repl_offset:" + offset,
+	}
+
+	infoString := strings.Join(infoLines, "\r\n") + "\r\n"
+
+	return "$" + strconv.Itoa(len(infoString)) + "\r\n" + infoString + "\r\n"
 }
 
 func (r *RESPParser) handleREPLCONF() string {
@@ -176,11 +199,26 @@ func (r *RESPParser) handleREPLCONF() string {
 }
 
 func (r *RESPParser) handlePSYNC() string {
-
 	masterReplId := r.client.Server.Config.Replid
-	// add
-	return "+FULLRESYNC " + masterReplId + " 0\r\n"
+
+	// Open empty.rdb only as a placeholder for now
+	data, err := os.ReadFile("empty.rdb")
+	if err != nil {
+		panic(err)
+	}
+
+	fileSize := len(data)
+
+	// r.client.Server.ReplicaMu.Lock()
+	// defer r.client.Server.ReplicaMu.Unlock()
+	// r.client.Server.Replicas = append(r.client.Server.Replicas, r.client)
+
+	// FULLRESYNC + bulk string header + raw bytes
+	return "+FULLRESYNC " + masterReplId + " 0\r\n" +
+		"$" + strconv.Itoa(fileSize) + "\r\n" +
+		string(data)
 }
+
 func (r *RESPParser) handleCommandSelection() string {
 	switch r.command {
 	case ECHO:
@@ -209,12 +247,26 @@ func ParseRESPInput(reader *bufio.Reader, c *types.ClientState) (string, error) 
 		return "", fmt.Errorf("empty input")
 	}
 
+	fmt.Println(line)
+
 	switch line[0] {
 	case '*':
 		return parseArray(line, reader, c)
 	default:
 		return "", fmt.Errorf("unknown input type: %s", line)
 	}
+}
+
+func SerializeToRESPOutput(commandArray []string) string {
+	result := ""
+	result += "*" + strconv.Itoa(len(commandArray)) + "\r\n"
+
+	for _, command := range commandArray {
+		result += "$" + strconv.Itoa(len(command)) + "\r\n"
+		result += command + "\r\n"
+	}
+
+	return result
 }
 
 func parseArray(line string, reader *bufio.Reader, c *types.ClientState) (string, error) {
