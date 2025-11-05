@@ -71,7 +71,7 @@ func NewClient(server *types.ServerState, conn net.Conn, id int) *types.ClientSt
 	return client
 }
 
-func (s *Server) InitializeReplicantHandshake() {
+func (s *Server) InitializeReplicantHandshake() { // this server pointer is of replica
 
 	conn, err := net.Dial("tcp", s.Config.MasterHost+":"+s.Config.MasterPort)
 	replicaPort := s.Config.Port
@@ -97,6 +97,8 @@ func (s *Server) InitializeReplicantHandshake() {
 	psyncCmd := "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"
 	conn.Write([]byte(psyncCmd))
 	reader.ReadString('\n')
+	// set the slave replica offset to zero
+	s.Config.ReplOffset = 0
 
 	// read the rdb reponse
 	fileSizeLine, err := reader.ReadString('\n')

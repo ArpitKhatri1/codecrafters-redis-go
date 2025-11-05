@@ -195,7 +195,16 @@ func (r *RESPParser) handleINFO() string {
 }
 
 func (r *RESPParser) handleREPLCONF() string {
-	return returnOKStatus()
+
+	secondParam := r.commandArray[1]
+
+	switch secondParam {
+	case "getack":
+		return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n" + strconv.Itoa(r.client.Server.Config.ReplOffset) + "\r\n"
+	default:
+		return returnOKStatus()
+	}
+
 }
 
 func (r *RESPParser) handlePSYNC() string {
