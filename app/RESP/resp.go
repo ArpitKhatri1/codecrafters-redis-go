@@ -209,9 +209,9 @@ func (r *RESPParser) handlePSYNC() string {
 
 	fileSize := len(data)
 
-	// r.client.Server.ReplicaMu.Lock()
-	// defer r.client.Server.ReplicaMu.Unlock()
-	// r.client.Server.Replicas = append(r.client.Server.Replicas, r.client)
+	r.client.Server.ReplicaMu.Lock()
+	defer r.client.Server.ReplicaMu.Unlock()
+	r.client.Server.Replicas = append(r.client.Server.Replicas, r.client)
 
 	// FULLRESYNC + bulk string header + raw bytes
 	return "+FULLRESYNC " + masterReplId + " 0\r\n" +

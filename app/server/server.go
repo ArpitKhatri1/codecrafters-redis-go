@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	resp "github.com/codecrafters-io/redis-starter-go/app/RESP"
@@ -100,16 +99,20 @@ func (s *Server) InitializeReplicantHandshake() {
 	reader.ReadString('\n')
 
 	// read the rdb reponse
+	fileSizeLine, err := reader.ReadString('\n')
+	if err != nil {
+		panic(err)
+	}
+	sizeStr := fileSizeLine[1 : len(fileSizeLine)-2]
 
-	fileSize, err := reader.ReadString('\n')
-	fileSize = strings.TrimPrefix(fileSize[1:], "\r\n")
+	// 2. Convert that clean string to an integer
+	IfileSize, err := strconv.Atoi(sizeStr)
 	if err != nil {
 		panic(err)
 	}
 
-	IfileSize, _ := strconv.Atoi(fileSize)
+	// 3. Now, IfileSize is correctly 123
 	byteData := make([]byte, IfileSize)
-
 	io.ReadFull(reader, byteData)
 	fmt.Println("File read of size", IfileSize)
 
